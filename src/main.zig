@@ -1,41 +1,45 @@
 const std = @import("std");
-
-const InputBuffer = struct {
-    buffer: []const u8,
-
-    fn read_input() !InputBuffer {
-        const reader = std.io.getStdIn().reader();
-        const bare_line = try reader.readUntilDelimiterAlloc(
-            std.heap.page_allocator,
-            '\n',
-            4096,
-        );
-        const line = std.mem.trim(u8, bare_line, "\r");
-        return InputBuffer{ .buffer = line };
-    }
-
-    fn print_prompt() !void {
-        const writer = std.io.getStdOut().writer();
-        try writer.print("db > ", .{});
-    }
-
-    fn close_input_buffer(self: InputBuffer) void {
-        std.heap.page_allocator.free(self.buffer);
-    }
-};
+const InputBuffer = @import("InputBuffer.zig");
+const Statement = @import("Statement.zig");
 
 pub fn main() !void {
     const writer = std.io.getStdOut().writer();
 
     while (true) {
-        try InputBuffer.print_prompt();
-        const input_buffer = try InputBuffer.read_input();
+        try InputBuffer.printPrompt();
+        const input_buffer = try InputBuffer.readInput();
 
-        if (std.mem.eql(u8, input_buffer.buffer, ".exit")) {
-            input_buffer.close_input_buffer();
-            return;
-        } else {
-            try writer.print("Unrecognized command '{s}'.\n", .{input_buffer.buffer});
+        if (input_buffer.buffer[0] == '.') {
+            if (doMetaCommand(&input_buffer)) |value| switch (value) {
+                .ExitSuccess => break,
+            } else |err| switch (err) {
+                error.MetaCommandUnrecognizedCommand => {
+                    try writer.print("Unrecognized command '{s}'\n", .{input_buffer.buffer});
+                    continue;
+                },
+            }
         }
+
+        var statement = if (Statement.prepareStatement(&input_buffer)) |statement| statement else |err| switch (err) {
+            error.PrepareUnrecognizedStatement => {
+                try writer.print("Unrecognized keyword at start of '{s}'\n", .{input_buffer.buffer});
+                continue;
+            },
+        };
+
+        statement.executeStatement();
+        try writer.print("Executed.\n", .{});
+    }
+}
+
+const MetaCommandError = error{MetaCommandUnrecognizedCommand};
+const MetaCommandResult = enum { ExitSuccess };
+
+fn doMetaCommand(input_buffer: *const InputBuffer) (MetaCommandError)!MetaCommandResult {
+    if (std.mem.eql(u8, input_buffer.buffer, ".exit")) {
+        input_buffer.closeInputBuffer();
+        return MetaCommandResult.ExitSuccess;
+    } else {
+        return MetaCommandError.MetaCommandUnrecognizedCommand;
     }
 }
