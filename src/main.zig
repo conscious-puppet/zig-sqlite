@@ -1,9 +1,18 @@
 const std = @import("std");
+
 const InputBuffer = @import("InputBuffer.zig");
-const Statement = @import("Statement.zig");
+const Statement = @import("statement.zig").Statement;
+const Table = @import("Table.zig");
 
 pub fn main() !void {
     const writer = std.io.getStdOut().writer();
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var table = try Table.newTable(allocator);
+    defer table.freeTable();
 
     while (true) {
         try InputBuffer.printPrompt();
@@ -25,9 +34,18 @@ pub fn main() !void {
                 try writer.print("Unrecognized keyword at start of '{s}'\n", .{input_buffer.buffer});
                 continue;
             },
+            error.PrepareSyntaxError => {
+                try writer.print("Prepare Syntax error for '{s}'\n", .{input_buffer.buffer});
+                continue;
+            },
         };
 
-        statement.executeStatement();
+        statement.executeStatement(table) catch |err| switch (err) {
+            error.ExecuteTableFull => {
+                try writer.print("Error: Table full.\n", .{});
+                break;
+            },
+        };
         try writer.print("Executed.\n", .{});
     }
 }
