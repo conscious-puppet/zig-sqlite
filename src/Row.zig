@@ -10,12 +10,12 @@ id: u32,
 username: [USERNAME_SIZE]u8,
 email: [EMAIL_SIZE]u8,
 
-pub const RowError = error{PrepareSyntaxError};
+pub const RowError = error{ PrepareSyntaxError, PrepareStringTooLong, PrepareInvalidID };
 
 pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) RowError!Row {
     const id = if (iter.next()) |id| blk: {
-        break :blk std.fmt.parseInt(u8, id, 10) catch {
-            return error.PrepareSyntaxError;
+        break :blk std.fmt.parseInt(u32, id, 10) catch {
+            return error.PrepareInvalidID;
         };
     } else {
         return error.PrepareSyntaxError;
@@ -23,9 +23,9 @@ pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) Row
 
     const username = if (iter.next()) |u| blk: {
         if (u.len > USERNAME_SIZE) {
-            return error.PrepareSyntaxError;
+            return error.PrepareStringTooLong;
         }
-        var username: [USERNAME_SIZE]u8 = undefined;
+        var username: [USERNAME_SIZE]u8 = [_]u8{0} ** USERNAME_SIZE;
         @memcpy(username[0..u.len], u);
         break :blk username;
     } else {
@@ -34,9 +34,9 @@ pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) Row
 
     const email = if (iter.next()) |e| blk: {
         if (e.len > EMAIL_SIZE) {
-            return error.PrepareSyntaxError;
+            return error.PrepareStringTooLong;
         }
-        var email: [EMAIL_SIZE]u8 = undefined;
+        var email: [EMAIL_SIZE]u8 = [_]u8{0} ** EMAIL_SIZE;
         @memcpy(email[0..e.len], e);
         break :blk email;
     } else {
@@ -56,20 +56,23 @@ pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) Row
     return row;
 }
 
-pub fn serialize_row(self: Row, destination: [*]u8) void {
+pub fn serializeRow(self: Row, destination: [*]u8) void {
     const bytes = std.mem.asBytes(&self);
     @memcpy(destination, bytes);
 }
 
-pub fn deserialize_row(source: [*]u8) *Row {
+pub fn deserializeRow(source: [*]u8) *Row {
     return std.mem.bytesAsValue(Row, source);
 }
 
-pub fn print_row(self: Row) !void {
+pub fn printRow(self: Row) !void {
     const writer = std.io.getStdOut().writer();
+    const null_val: [1]u8 = [_]u8{0};
+    const username = std.mem.trimRight(u8, &self.username, &null_val);
+    const email = std.mem.trimRight(u8, &self.email, &null_val);
     try writer.print("({d}, {s}, {s})\n", .{
         self.id,
-        self.username,
-        self.email,
+        username,
+        email,
     });
 }

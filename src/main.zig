@@ -38,6 +38,14 @@ pub fn main() !void {
                 try writer.print("Prepare Syntax error for '{s}'\n", .{input_buffer.buffer});
                 continue;
             },
+            error.PrepareStringTooLong => {
+                try writer.print("String is too long.\n", .{});
+                continue;
+            },
+            error.PrepareInvalidID => {
+                try writer.print("Invalid ID.\n", .{});
+                continue;
+            },
         };
 
         statement.executeStatement(table) catch |err| switch (err) {

@@ -67,7 +67,7 @@ pub fn executeSelect(self: *Table) ExecuteError!void {
             return error.ExecuteTableFull;
         };
         const r = row.* orelse continue;
-        r.print_row() catch {
+        r.printRow() catch {
             return error.ExecuteTableFull;
         };
     }
