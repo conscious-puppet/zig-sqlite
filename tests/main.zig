@@ -9,6 +9,25 @@ fn expectEqualOutput(expected_output: []const []const u8, output: [][]const u8) 
     }
 }
 
+fn testInput(input: []const []const u8, expected_output: []const []const u8) !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var proc = try Proc.init(allocator);
+    defer proc.deinit();
+
+    const output = try proc.spawnRustSqlite(allocator, input);
+    defer {
+        for (output.items) |line| {
+            allocator.free(line);
+        }
+        output.deinit();
+    }
+
+    try expectEqualOutput(expected_output, output.items);
+}
+
 test "inserts and retrieves a row" {
     const input = [_][]const u8{
         "insert 1 user1 person1@example.com",
@@ -22,22 +41,7 @@ test "inserts and retrieves a row" {
         "db > ",
     };
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var proc = try Proc.init(allocator);
-    defer proc.deinit();
-
-    const output = try proc.spawnRustSqlite(allocator, &input);
-    defer {
-        for (output.items) |line| {
-            allocator.free(line);
-        }
-        output.deinit();
-    }
-
-    try expectEqualOutput(&expected_output, output.items);
+    try testInput(&input, &expected_output);
 }
 
 test "prints error message when table is full" {
@@ -78,7 +82,7 @@ test "prints error message when table is full" {
         output.deinit();
     }
 
-    try std.testing.expectEqualStrings(expected_output, output.items[output.items.len - 1]);
+    try std.testing.expectEqualStrings(expected_output, output.items[output.items.len - 2]);
 }
 
 test "allows inserting strings that are the maximum length" {
@@ -116,18 +120,7 @@ test "allows inserting strings that are the maximum length" {
         "db > ",
     };
 
-    var proc = try Proc.init(allocator);
-    defer proc.deinit();
-
-    const output = try proc.spawnRustSqlite(allocator, &input);
-    defer {
-        for (output.items) |line| {
-            allocator.free(line);
-        }
-        output.deinit();
-    }
-
-    try expectEqualOutput(&expected_output, output.items);
+    try testInput(&input, &expected_output);
 }
 
 test "prints error message if strings are too long" {
@@ -157,18 +150,7 @@ test "prints error message if strings are too long" {
         "db > ",
     };
 
-    var proc = try Proc.init(allocator);
-    defer proc.deinit();
-
-    const output = try proc.spawnRustSqlite(allocator, &input);
-    defer {
-        for (output.items) |line| {
-            allocator.free(line);
-        }
-        output.deinit();
-    }
-
-    try expectEqualOutput(&expected_output, output.items);
+    try testInput(&input, &expected_output);
 }
 
 test "prints an error message if id is negative" {
@@ -183,20 +165,5 @@ test "prints an error message if id is negative" {
         "db > ",
     };
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var proc = try Proc.init(allocator);
-    defer proc.deinit();
-
-    const output = try proc.spawnRustSqlite(allocator, &input);
-    defer {
-        for (output.items) |line| {
-            allocator.free(line);
-        }
-        output.deinit();
-    }
-
-    try expectEqualOutput(&expected_output, output.items);
+    try testInput(&input, &expected_output);
 }

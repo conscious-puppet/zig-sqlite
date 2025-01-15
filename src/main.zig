@@ -51,7 +51,7 @@ pub fn main() !void {
         statement.executeStatement(table) catch |err| switch (err) {
             error.ExecuteTableFull => {
                 try writer.print("Error: Table full.\n", .{});
-                break;
+                continue;
             },
         };
         try writer.print("Executed.\n", .{});
