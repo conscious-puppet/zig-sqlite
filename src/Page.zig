@@ -13,7 +13,7 @@ rows: [ROWS_PER_PAGE]?Row,
 pub fn newPage(allocator: Allocator) !*Page {
     const page = try allocator.create(Page);
     for (0..ROWS_PER_PAGE) |i| {
-        page.*.rows[i] = null;
+        page.rows[i] = null;
     }
     return page;
 }

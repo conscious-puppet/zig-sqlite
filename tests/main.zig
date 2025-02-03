@@ -167,3 +167,53 @@ test "prints an error message if id is negative" {
 
     try testInput(&input, &expected_output);
 }
+
+test "keeps data after closing connection" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var proc = try Proc.init(allocator);
+    defer proc.deinit();
+
+    const input1 = [_][]const u8{
+        "insert 1 user1 person1@example.com",
+        ".exit",
+    };
+
+    const expected_output1 = [_][]const u8{
+        "db > Executed.",
+        "db > ",
+    };
+
+    const output1 = try proc.spawnRustSqlite(allocator, &input1);
+    defer {
+        for (output1.items) |line| {
+            allocator.free(line);
+        }
+        output1.deinit();
+    }
+
+    try expectEqualOutput(&expected_output1, output1.items);
+
+    const input2 = [_][]const u8{
+        "select",
+        ".exit",
+    };
+
+    const expected_output2 = [_][]const u8{
+        "db > (1, user1, person1@example.com)",
+        "Executed.",
+        "db > ",
+    };
+
+    const output2 = try proc.spawnRustSqlite(allocator, &input2);
+    defer {
+        for (output2.items) |line| {
+            allocator.free(line);
+        }
+        output2.deinit();
+    }
+
+    try expectEqualOutput(&expected_output2, output2.items);
+}

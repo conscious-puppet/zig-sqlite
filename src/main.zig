@@ -11,8 +11,18 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var table = try Table.newTable(allocator);
-    defer table.freeTable();
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+
+    _ = args.skip(); // skip executable name
+
+    const filename = args.next() orelse {
+        try writer.print("Must supply a database filename.\n", .{});
+        return error.ExitFailure;
+    };
+
+    var table = try Table.dbOpen(allocator, filename);
+    defer table.dbClose();
 
     while (true) {
         try InputBuffer.printPrompt();

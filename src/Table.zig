@@ -3,72 +3,79 @@ const Allocator = std.mem.Allocator;
 
 const Row = @import("Row.zig");
 const Page = @import("Page.zig");
+const Pager = @import("Pager.zig");
 
 pub const ExecuteError = error{ExecuteTableFull};
 
 pub const Table = @This();
 
-pub const PAGE_SIZE = 4096;
-pub const TABLE_MAX_PAGES = 100;
-pub const TABLE_MAX_ROWS = Page.ROWS_PER_PAGE * TABLE_MAX_PAGES;
-
 num_rows: u32,
-pages: [TABLE_MAX_PAGES]?*Page,
+pager: *Pager,
 allocator: Allocator,
 
-pub fn newTable(allocator: Allocator) !*Table {
+pub fn dbOpen(allocator: Allocator, filename: []const u8) !*Table {
+    const pager = try Pager.pagerOpen(allocator, filename);
+    const num_rows = pager.file_length / Row.ROW_SIZE;
+
     const table = try allocator.create(Table);
-    table.*.num_rows = 0;
-    table.*.allocator = allocator;
-    for (0..TABLE_MAX_PAGES) |i| {
-        table.*.pages[i] = null;
-    }
+    table.* = .{
+        .num_rows = @as(u32, @intCast(num_rows)),
+        .pager = pager,
+        .allocator = allocator,
+    };
     return table;
 }
 
-pub fn freeTable(self: *Table) void {
-    for (0..TABLE_MAX_PAGES) |i| {
-        if (self.*.pages[i]) |page| {
-            page.freePage(self.allocator);
-        }
+pub fn dbClose(self: *Table) void {
+    defer self.allocator.destroy(self);
+    defer self.pager.pagerClose();
+
+    const num_full_pages = self.num_rows / Page.ROWS_PER_PAGE;
+
+    for (0..num_full_pages) |i| {
+        self.pager.pagerFlush(@as(u32, @intCast(i))) catch {
+            std.debug.print("Ignoring the error while flushing the page.", .{});
+        };
     }
-    self.allocator.destroy(self);
+
+    // There may be a partial page to write to the end of the file
+    // This should not be needed after we switch to a B-tree
+    const num_additional_rows = self.num_rows % Page.ROWS_PER_PAGE;
+    if (num_additional_rows > 0) {
+        const page_num = num_full_pages;
+        self.pager.pagerFlush(@as(u32, @intCast(page_num))) catch {
+            std.debug.print("Ignoring the error while flushing the page.", .{});
+        };
+    }
 }
 
-pub fn rowSlot(self: *Table, row_num: u32) ExecuteError!*?Row {
+pub fn rowSlot(self: *Table, row_num: u32) !*?Row {
     const page_num = row_num / Page.ROWS_PER_PAGE;
-    const page = self.*.pages[page_num] orelse blk: {
-        // Allocate memory only when we try to access page
-        const allocated_page = Page.newPage(self.*.allocator) catch {
-            return ExecuteError.ExecuteTableFull;
-        };
-        self.*.pages[page_num] = allocated_page;
-        break :blk allocated_page;
-    };
+    const page = try self.pager.getPage(@as(u32, @intCast(page_num)));
     const row_offset = row_num % Page.ROWS_PER_PAGE;
     return &page.rows[row_offset];
 }
 
-pub fn executeInsert(self: *Table, row: Row) ExecuteError!void {
-    if (self.*.num_rows >= TABLE_MAX_ROWS) {
-        return error.ExecuteTableFull;
+pub fn executeInsert(self: *Table, row: Row) !void {
+    if (self.num_rows >= Pager.TABLE_MAX_ROWS) {
+        return ExecuteError.ExecuteTableFull;
     }
-    const row_slot = self.rowSlot(self.*.num_rows) catch {
-        return error.ExecuteTableFull;
+    const row_slot = self.rowSlot(self.num_rows) catch {
+        return ExecuteError.ExecuteTableFull;
     };
     row_slot.* = row;
-    self.*.num_rows += 1;
+    self.num_rows += 1;
     return;
 }
 
-pub fn executeSelect(self: *Table) ExecuteError!void {
-    for (0..self.*.num_rows) |i| {
+pub fn executeSelect(self: *Table) !void {
+    for (0..self.num_rows) |i| {
         const row = self.rowSlot(@as(u32, @intCast(i))) catch {
-            return error.ExecuteTableFull;
+            return ExecuteError.ExecuteTableFull;
         };
         const r = row.* orelse continue;
         r.printRow() catch {
-            return error.ExecuteTableFull;
+            return ExecuteError.ExecuteTableFull;
         };
     }
     return;

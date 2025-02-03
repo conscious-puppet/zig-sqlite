@@ -6,11 +6,11 @@ pub const USERNAME_SIZE: usize = 32;
 pub const EMAIL_SIZE: usize = 255;
 pub const ROW_SIZE: usize = @sizeOf(Row);
 
+pub const RowError = error{ PrepareSyntaxError, PrepareStringTooLong, PrepareInvalidID };
+
 id: u32,
 username: [USERNAME_SIZE]u8,
 email: [EMAIL_SIZE]u8,
-
-pub const RowError = error{ PrepareSyntaxError, PrepareStringTooLong, PrepareInvalidID };
 
 pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) RowError!Row {
     const id = if (iter.next()) |id| blk: {
@@ -54,15 +54,6 @@ pub fn new(iter: *std.mem.SplitIterator(u8, std.mem.DelimiterType.sequence)) Row
     };
 
     return row;
-}
-
-pub fn serializeRow(self: Row, destination: [*]u8) void {
-    const bytes = std.mem.asBytes(&self);
-    @memcpy(destination, bytes);
-}
-
-pub fn deserializeRow(source: [*]u8) *Row {
-    return std.mem.bytesAsValue(Row, source);
 }
 
 pub fn printRow(self: Row) !void {
